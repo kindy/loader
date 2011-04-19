@@ -1,0 +1,36 @@
+比如 有 a.js, b.js, sub/c.js, c 依赖 a 和 b,以及 jquery
+
+lua 模式
+
+假设目录结构如下
+app.com/js/
+    a.js
+    b.js
+    sub/c.js
+
+cdn.cn/js/lib/jquery.js
+
+-- index.html
+<script src="/abs/path/to/loader.js"></script>
+<script>
+require.config({path: '/js/?.js'});
+require.config('cdn', {path: 'cdn.cn/js/?.js'});
+
+require('sub.c', function (c) {
+    c.init();
+});
+</script>
+
+-- sub/c.js
+module('sub.c', 'a', 'b', function (a, b) {
+    // do some init;
+    // 这里 a, b 会引用模块，可能不适合垃圾回收
+
+    return {
+        init: function () {
+            var a = require('a');
+            alert('init');
+        }
+    };
+});
+
