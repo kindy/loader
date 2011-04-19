@@ -3,34 +3,68 @@
 lua 模式
 
 假设目录结构如下
-app.com/js/
-    a.js
-    b.js
-    sub/c.js
+app.com/
+    index.html
+    js/
+        a.js
+        b.js
+        sub/c.js
 
-cdn.cn/js/lib/jquery.js
+cdn.cn/loader/
+    loader.js
+    lib/jquery.js
 
 -- index.html
-<script src="/abs/path/to/loader.js"></script>
+<script src="http://cdn.cn/loader/loader.js"></script>
 <script>
-require.config({path: '/js/?.js'});
-require.config('cdn', {path: 'cdn.cn/js/?.js'});
+require.config('app', {path: '/js/?.js'});
 
-require('sub.c', function (c) {
+require('sub.c@app', function (c) {
     c.init();
 });
 </script>
 
+-- a.js
+module('a', function () {
+    return {
+        foo: function () {
+            alert('i am a');
+        }
+    }
+});
+
+-- b.js
+module('b', function () {
+    return {
+        foo: function () {
+            alert('i am b');
+        }
+    }
+});
+
 -- sub/c.js
-module('sub.c', 'a', 'b', function (a, b) {
+module('sub.c', 'lib/jquery', 'a@app', 'b@app', function ($, a, b) {
     // do some init;
     // 这里 a, b 会引用模块，可能不适合垃圾回收
 
     return {
         init: function () {
-            var a = require('a');
-            alert('init');
+            var a = require('a'),
+                b = require('b');
+
+            alert([
+                'init call',
+                'a.foo -> ' + a.foo(),
+                'b.foo -> ' + b.foo()
+            ].join('\n'));
         }
     };
 });
+
+
+在上面的例子里，require 有个问题是查找"模块加载路径"，当模块加载后，
+就无所谓了。因为会从缓存内得到。
+
+这个问题在用户自己搭建 loader 的时候不存在，只在用户同时使用线上模块和
+自己本地模块的时候存在。
 
