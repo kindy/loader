@@ -70,6 +70,7 @@ function _get_module (mod) {
         return mod.module;
     } else if (mod.fn) {
         if (mod.reqs && mod.reqs._len) {
+            _log(mod.reqs);
             return null;
         }
         mod.module = function m () {
@@ -110,11 +111,15 @@ module = function () {
         };
         if (args.length) {
             mod.reqs = {};
-            mod._reqs = {};
+            var m;
             for (var i = 0, iM = args.length; i < iM; ++i) {
-                mod._reqs[args[i]] = mod.reqs[args[i]] = true;
+                m = _parse(args[i]);
+                mod.reqs[m.name] = true;
+                if (m.config) {
+                    _mods[m.name] = m;
+                }
             }
-            mod._reqs._len = mod.reqs._len = args.length;
+            mod.reqs._len = args.length;
         }
 
         _mods[n] = mod;
@@ -179,7 +184,11 @@ require = function () {
 
     if (! req.length) {
         cb.apply(null, mods);
+        return true;
     }
+
+    _log(req);
+    return false;
 };
 
 
