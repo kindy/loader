@@ -18,7 +18,8 @@ name: 'a.b.c',
 url: 'xx',
 config: 'app',
 factory: function () {},
-module: function () {}
+module: function () {},
+_getm: function () {}
 }
 */
 var _mods = {},
@@ -31,10 +32,17 @@ var now = Date.now || (function() {
     head = document.getElementsByTagName('head')[0];
 
 var _config = {
-    '_': {
-        path: '/js/?.js'
-    }
-};
+        '_': {
+            path: '/js/?.js'
+        }
+    },
+
+    EMPTY = 1,
+    LOADING = 2,
+    LOADED = 3,
+    INIT = 4,
+
+    re_mod_name = /^(.+)(?:@(.+))?$/;
 
 
 function _merge (r, s) {
@@ -42,7 +50,7 @@ function _merge (r, s) {
         return r || s;
     }
 
-    for (i in s) {
+    for (var i in s) {
         if (s.hasOwnProperty(i)) {
             r[i] = s[i];
         }
@@ -50,46 +58,67 @@ function _merge (r, s) {
 
     return r;
 }
-function _parse (name) {
-    var m = name.match(/^(.+)(?:@(.+))?$/);
 
-    return {
-        name: m[1],
-        config: m[2]
-    };
-}
-
-function _get_module (mod) {
-    mod = _mods[mod];
-
-    if (! mod) {
-        return null;
-    }
+function _get_module () {
+    var mod = this;
 
     if (mod.module) {
         return mod.module;
-    } else if (mod.fn) {
-        if (mod.reqs && mod.reqs._len) {
-            _log(mod.reqs);
-            return null;
-        }
-        mod.module = function m () {
-            if (m.__call) {
-                return m.__call.apply(m, arguments);
-            }
-
-            throw 'module ' + mod.name + ' can not be call';
-        };
-        _merge(mod.module, mod.fn());
-
-        return mod.module;
-    } else {
-        return null;
     }
+
+    if (mod.status < LOADED || check_deps(mod) !== true) {
+        throw 'module [' + mod.name + '] not ok for get';
+    }
+
+    function m () {
+        if (m.__call) {
+            return m.__call.apply(m, arguments);
+        }
+
+        throw 'module ' + mod.name + ' can not be call';
+    }
+
+    _merge(m, mod.init());
+
+    mod.module = m;
+
+    return m;
 }
 
+function check_deps (mod) {
+            mod.deps[i] = get_or_init_m(args[i]).name;
+    var m;
+}
+
+function _load (mods, cb) {
+    _log(mods, cb);
+}
+
+function get_or_init_m (n) {
+    var r = re_mod_name.match(n);
+    if (! r) throw 'module name [' + n + '] not valid';
+    n = r[0];
+
+    if (n in _mods) return _mods[n];
+
+    return (_mods[n] = {
+        name: n,
+        config: (r[1] || '_'),
+        status: EMPTY,
+        _getm: _get_module
+    });
+}
 
 /*
+ * module object
+ * {
+ *  name: "a",
+ *  config: "_",
+ *  status: EMPTY|LOADING|LOADED|INIT,
+ *  deps: ["b", "c"],
+ *  init: fn,
+ *  module: fn with all exports(when status = INIT),
+ * }
  * module('a', init)
  * module('a', 'b', 'c', init)
  */
@@ -98,33 +127,22 @@ module = function () {
         fn = args.pop(),
         n = args.shift();
 
-    if (! (fn && fn.call)) throw 'module() must have a fn';
+    if (! (fn && fn.call)) throw 'module() must have a factory function';
+    if (! n) throw 'module() must have a name';
 
-    if (n) {
-        if (n in _mods) {
-            _log('warn: module [' + n + '] load duplicate');
+    var mod = get_or_init_m(n);
+    if (mod.init) {
+        _log('warn: module [' + mod.name + '] load duplicate');
+    }
+
+    mod.status = LOADED;
+    mod.init = fn;
+
+    if (args.length) {
+        mod.deps = [];
+        for (var i = 0, iM = args.length; i < iM; ++i) {
+            mod.deps[i] = get_or_init_m(args[i]).name;
         }
-
-        var mod = {
-            name: n,
-            fn: fn
-        };
-        if (args.length) {
-            mod.reqs = {};
-            var m;
-            for (var i = 0, iM = args.length; i < iM; ++i) {
-                m = _parse(args[i]);
-                mod.reqs[m.name] = true;
-                if (m.config) {
-                    _mods[m.name] = m;
-                }
-            }
-            mod.reqs._len = args.length;
-        }
-
-        _mods[n] = mod;
-    } else {
-        fn();
     }
 };
 
@@ -147,54 +165,55 @@ require = function () {
         cb = null;
     }
 
-    var mods = [],
-        i = 0, iM = args.length;
+    var i = 0,
+        iM = args.length,
+        missing = [],
+        mod,
+        dep;
 
     if (! iM) throw 'require() need mod name';
 
     for (; i < iM; ++i) {
-        mods.push(_parse(args[i]));
-    }
+        dep = 0;
+        mod = get_or_init_m(args[i]);
+        ret[i] = mod;
 
-    var m,
-        mname,
-        req = [],
-        req_name = [];
-
-    for (i = 0; i < iM; ++i) {
-        mname = mods[i].name;
-        m = _get_module(mname);
-
-        if (! m) {
-            req.push(mods[i]);
-            req_name.push(mname);
-        } else {
-            mods[i] = m;
+        if (mod.status < LOADED) {
+            missing.push(mod.name);
+        } else if ((dep = check_deps(mod)) !== true) {
+            if (dep && dep.length && dep.concat) {
+                missing.push.apply(missing, dep);
+            }
         }
     }
 
     // 进入返回模式
     if (! cb) {
-        if (req.length) {
-            throw ('module [' + req_name.join(',') + '] not loaded');
+        if (missing.length) {
+            throw ('modules [' + missing.join(', ') + '] not loaded');
         }
 
-        return iM == 1 ? m : mods;
+        for (i = 0; i < iM; ++i) {
+            ret[i] = ret[i]._getm();
+        }
+
+        return iM == 1 ? ret[0] : ret;
     }
 
-    if (! req.length) {
-        cb.apply(null, mods);
+    if (! missing.length) {
+        // 自动加载 require 的所有模块 ?
+        // cb.apply(null, mods);
+        cb();
         return true;
     }
 
-    _log(req);
+    _load(missing, cb);
     return false;
 };
 
 
 module('yui.ua', function() {
     return (function(subUA) {
-        
         var numberify = function(s) {
                 var c = 0;
                 return parseFloat(s.replace(/\./g, function() {
