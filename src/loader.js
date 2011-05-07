@@ -13,15 +13,18 @@ var require, module;
 if (require || module) return;
 
 /*
-{
-name: 'a.b.c',
-url: 'xx',
-config: 'app',
-factory: function () {},
-module: function () {},
-_getm: function () {}
-}
-*/
+ * module object
+ * {
+ *  name: "a",
+ *  config: "_",
+ *  status: EMPTY|LOADING|LOADED|INIT,
+ *  deps: ["b", "c"],
+ *  init: fn,
+ *  module: fn with all exports(when status = INIT),
+ *  _getm: function () {}
+ *  _geturl: function () {}
+ * }
+ */
 var _mods = {},
     _reqs = [];
 
@@ -33,7 +36,7 @@ var now = Date.now || (function() {
 
 var _config = {
         '_': {
-            path: '/js/?.js'
+            path: '?.js'
         }
     },
 
@@ -43,7 +46,6 @@ var _config = {
     INIT = 4,
 
     re_mod_name = /^(.+)(?:@(.+))?$/;
-
 
 function _merge (r, s) {
     if (!s || !r) {
@@ -59,66 +61,171 @@ function _merge (r, s) {
     return r;
 }
 
-function _get_module () {
-    var mod = this;
+function ModuleDef (cfg) {
+    _merge(this, cfg);
+}
+_merge(ModuleDef.prototype, {
+    _geturl: function () {
+        var mod = this;
 
-    if (mod.module) {
-        return mod.module;
-    }
+        var path = _config[mod.config].path;
+        var url = path.replace(/\?/, mod.name);
+        return url;
+    },
+    _getm: function () {
+        var mod = this;
 
-    if (mod.status < LOADED || check_deps(mod) !== true) {
-        throw 'module [' + mod.name + '] not ok for get';
-    }
-
-    function m () {
-        if (m.__call) {
-            return m.__call.apply(m, arguments);
+        if (mod.module) {
+            return mod.module;
         }
 
-        throw 'module ' + mod.name + ' can not be call';
+        if (mod.status < LOADED || check_deps(mod) !== true) {
+            throw 'module [' + mod.name + '] not ok for get';
+        }
+
+        function m () {
+            if (m.__call) {
+                return m.__call.apply(m, arguments);
+            }
+
+            throw 'module ' + mod.name + ' can not be call';
+        }
+        m.toString = function () {
+            return 'module [' + mod.name + '@' + mod.config + ']';
+        };
+
+        _merge(m, mod.init());
+
+        mod.status = INIT;
+        mod.module = m;
+
+        return m;
+    }
+});
+
+function check_deps (mod, alldeps) {
+    _log('check_deps', mod.name, JSON.stringify(alldeps));
+
+    var modname = mod.name;
+
+    var deps;
+    var ret = [];
+    //TODO: 用于循环引用判定
+    alldeps = alldeps || {};
+    if ('__c' in alldeps) {
+        alldeps.__c++;
+    } else {
+        alldeps.__c = 1;
+    }
+    if (alldeps.__c >= 300) throw 'too much check deps';
+
+    if (modname in alldeps) return true;
+    alldeps[modname] = 1;
+
+    deps = mod.deps;
+    if (!deps || !deps.length) return true;
+
+    for (var i = 0, iM = deps.length; i < iM; ++i) {
+        var dep = deps[i],
+            depmod = _mods[dep];
+
+        if (dep in alldeps) return true;
+        alldeps[dep] = 1;
+
+        if (depmod.status >= INIT) {
+            continue;
+        } else if (depmod.status < LOADED) {
+            ret.push(dep);
+        } else if ((dep = check_deps(depmod, alldeps)) !== true) {
+            ret.push.apply(ret, dep);
+        }
     }
 
-    _merge(m, mod.init());
-
-    mod.module = m;
-
-    return m;
-}
-
-function check_deps (mod) {
-            mod.deps[i] = get_or_init_m(args[i]).name;
-    var m;
+    return ret.length ? ret : true;
 }
 
 function _load (mods, cb) {
-    _log(mods, cb);
+    var get = require('yui.get');
+
+    function grep () {
+        var ret = [],
+            _h = {},
+            dep;
+
+        for (var i = 0, iM = mods.length; i < iM; ++i) {
+            var modname = mods[i],
+                mod;
+            if (modname in _h) continue;
+            _h[modname] = 1;
+
+            mod = _mods[modname];
+            if (mod.status < LOADING) {
+                ret.push(modname);
+            } else if (mod.status >= LOADED &&
+                    ((dep = check_deps(mod)) !== true)) {
+                for (var j = 0, jM = dep.length; j < jM; ++j) {
+                    modname = dep[j];
+                    if (modname in _h) continue;
+                    _h[modname] = 1;
+
+                    ret.push(modname);
+                }
+            }
+        }
+
+        mods = ret.slice(0);
+        _h = mod = dep = ret = null;
+    }
+    _log('need load', mods.slice(0), cb);
+
+    // 对于 inline <script ， setTimeout 是必要的，
+    // 可以让 require 后续的 module 定义加载进来
+    setTimeout(function go () {
+        grep();
+        _log('first time in _load', mods.slice(0));
+        var modname = mods.shift();
+        if (! modname) return cb();
+
+        var mod = _mods[modname],
+            url = mod._geturl();
+
+        _log('grep in _load', mods.slice(0));
+
+        mod.status = LOADING;
+        get.script(url, {
+            onEnd: function () {
+                cb();
+                _log('load in onEnd');
+            },
+            onNext: function () {
+                grep();
+                _log('load in onNext', mods.slice(0));
+                _log('_mods', JSON.stringify(_mods));
+                if (mods.length) {
+                    mod = _mods[mods.shift()];
+                    mod.status = LOADING;
+                    this.url.push(mod._geturl());
+                }
+            }
+        });
+    }, 0);
 }
 
 function get_or_init_m (n) {
-    var r = re_mod_name.match(n);
+    var r = n.match(re_mod_name);
     if (! r) throw 'module name [' + n + '] not valid';
-    n = r[0];
+    n = r[1];
 
     if (n in _mods) return _mods[n];
 
-    return (_mods[n] = {
+    return (_mods[n] = new ModuleDef({
         name: n,
-        config: (r[1] || '_'),
+        config: (r[2] || '_'),
         status: EMPTY,
-        _getm: _get_module
-    });
+    }));
 }
 
 /*
- * module object
- * {
- *  name: "a",
- *  config: "_",
- *  status: EMPTY|LOADING|LOADED|INIT,
- *  deps: ["b", "c"],
- *  init: fn,
- *  module: fn with all exports(when status = INIT),
- * }
  * module('a', init)
  * module('a', 'b', 'c', init)
  */
@@ -131,7 +238,8 @@ module = function () {
     if (! n) throw 'module() must have a name';
 
     var mod = get_or_init_m(n);
-    if (mod.init) {
+    //TODO 重复加载 模块 ，如何处理
+    if (mod.status >= LOADED) {
         _log('warn: module [' + mod.name + '] load duplicate');
     }
 
@@ -178,12 +286,11 @@ require = function () {
         mod = get_or_init_m(args[i]);
         ret[i] = mod;
 
+        _log(JSON.stringify(mod));
         if (mod.status < LOADED) {
             missing.push(mod.name);
-        } else if ((dep = check_deps(mod)) !== true) {
-            if (dep && dep.length && dep.concat) {
-                missing.push.apply(missing, dep);
-            }
+        } else if (mod.status < INIT && (dep = check_deps(mod)) !== true) {
+            missing.push.apply(missing, dep);
         }
     }
 
@@ -209,6 +316,9 @@ require = function () {
 
     _load(missing, cb);
     return false;
+};
+
+require.config = function (name, cfg) {
 };
 
 
@@ -512,7 +622,7 @@ var STRING = 'string',
 
 var _idx = 0;
 function _guid () {
-    return ++idx;
+    return ++_idx;
 }
 /**
  * Fetches and inserts one or more script or link nodes into the document
@@ -742,6 +852,8 @@ return (function() {
         var q = queues[id], msg, w, d, h, n, url, s,
             insertBefore;
 
+        _log('node in _next', q);
+
         if (q.timer) {
             // q.timer.cancel();
             clearTimeout(q.timer);
@@ -758,6 +870,7 @@ return (function() {
             if (q.varName) {
                 q.varName.shift();
             }
+            q.onNext && q.onNext();
         } else {
             // This is the first pass: make sure the url is an array
             q.url = (L.isString(q.url)) ? [q.url] : q.url;

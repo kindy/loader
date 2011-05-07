@@ -5,20 +5,21 @@
     <title>demo</title>
     <script src="../src/loader.js"></script>
     <script>
-        module('a', function () {
+        // 这里调换 a, b 顺序会影响加载的 js 数量
+        // 因为 c.js 里同时有模块 c 和 d 的定义
+        require('b', 'a', function (a, b) {
+            alert(require('a').a);
+            alert(require('b').a);
+        });
+        module('a', 'c', 'b', function () {
             return {
-                a: 124
+                a: 'a'
             };
         });
-        module('b', 'c', function () {
+        module('b', 'd', function () {
             return {
-                a: 124
+                a: 'b'
             };
-        });
-
-        require('a', 'b', function (a, b) {
-            alert(a.a);
-            alert(b.a);
         });
     </script>
 </head>
