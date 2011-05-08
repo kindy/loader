@@ -15,18 +15,18 @@ if (require || module) return;
 /*
  * module object
  * {
- *  name: "a",
- *  config: "_",
- *  status: EMPTY|LOADING|LOADED|INIT,
- *  deps: ["b", "c"],
- *  init: fn,
- *  module: fn with all exports(when status = INIT),
- *  _getm: function () {}
- *  _geturl: function () {}
+ *  name: "a",                  - 模块名称
+ *  ns: "_",                    - 模块使用的配置，影响模块行为和加载路径
+ *  status: EMPTY|LOADING|LOADED|INIT,  - 状态
+ *  deps: ["b", "c"],           - 依赖列表
+ *  init: fn,                   - 初始化函数，此函数非传给 module 的函数，被包了
+ *  getm: function () {}       - (初始化并)获取模块
+ *  geturl: function () {}     - 获取加载地址
+ *  byother: true|false         - 是否通过独立的 js 加载的
  * }
  */
 var _mods = {},
-    _reqs = [];
+    _modlist = [];
 
 var now = Date.now || (function() {
         return new Date().getTime();
@@ -34,10 +34,12 @@ var now = Date.now || (function() {
     slice = Array.prototype.slice,
     head = document.getElementsByTagName('head')[0];
 
-var _config = {
-        '_': {
+var _dftns = '_',
+    _dftnscfg = {
             path: '?.js'
-        }
+        },
+    _modns = {
+        _: _merge({}, _dftnscfg)
     },
 
     EMPTY = 1,
@@ -45,7 +47,7 @@ var _config = {
     LOADED = 3,
     INIT = 4,
 
-    re_mod_name = /^(.+)(?:@(.+))?$/;
+    re_mod_name = /^([^@]+)(?:@(.+))?$/;
 
 function _merge (r, s) {
     if (!s || !r) {
@@ -61,18 +63,75 @@ function _merge (r, s) {
     return r;
 }
 
-function ModuleDef (cfg) {
-    _merge(this, cfg);
+function ModuleDef (name) {
+    function m () {
+        if (m.__call) {
+            return m.__call.apply(this, arguments);
+        }
+
+        throw 'module ' + m._NAME + ' can not be call';
+    }
+
+    m._NAME = name;
+    m._M = m;
+
+    _merge(m, ModuleDef.prototype);
+
+    return m;
 }
 _merge(ModuleDef.prototype, {
-    _geturl: function () {
-        var mod = this;
+    toString: function () {
+        var ns = this._getCfg().ns;
+        return 'module [' + this._NAME + (ns === _dftns ? '' : ('@' + ns)) + ']';
+    },
+    _getCfg: function () {
+        return _mods[this._NAME];
+    }
+});
 
-        var path = _config[mod.config].path;
-        var url = path.replace(/\?/, mod.name);
+function ModuleCfg (cfg) {
+    _merge(this, cfg);
+}
+_merge(ModuleCfg.prototype, {
+    geturl: function (rload) {
+        var path = _modns[this.ns].path;
+        var url = path.replace(/\?/, this.name.replace(/\./g, '/'));
+
+        if (this.nocache) {
+            url += (url.indexOf('?') === -1 ? '?' : '&') + '_t=' + new Date().getTime();
+            if (rload) {
+                delete this.nocache;
+            }
+        }
+
         return url;
     },
-    _getm: function () {
+    clear: function (n) {
+        if (n >= 1) {
+            delete this.export;
+
+            if (this.module.__clear) {
+                this.module.__clear();
+            }
+
+            delete this.module;
+            this.status = LOADED;
+        }
+
+        if (n >= 2) {
+            delete this.init;
+            delete this.byother;
+            delete this.deps;
+            this.status = EMPTY;
+        }
+
+        if (n >= 3) {
+            this.nocache = true;
+        }
+
+        return this;
+    },
+    getm: function () {
         var mod = this;
 
         if (mod.module) {
@@ -83,19 +142,10 @@ _merge(ModuleDef.prototype, {
             throw 'module [' + mod.name + '] not ok for get';
         }
 
-        function m () {
-            if (m.__call) {
-                return m.__call.apply(m, arguments);
-            }
+        var m = new ModuleDef(mod.name);
 
-            throw 'module ' + mod.name + ' can not be call';
-        }
-        m.toString = function () {
-            return 'module [' + mod.name + '@' + mod.config + ']';
-        };
-
-        _merge(m, mod.init());
-
+        mod.export = mod.init();
+        _merge(m, mod.export);
         mod.status = INIT;
         mod.module = m;
 
@@ -186,42 +236,50 @@ function _load (mods, cb) {
         var modname = mods.shift();
         if (! modname) return cb();
 
-        var mod = _mods[modname],
-            url = mod._geturl();
+        var mod = _mods[modname];
 
-        _log('grep in _load', mods.slice(0));
+        //_log('grep in _load', mods.slice(0));
 
         mod.status = LOADING;
-        get.script(url, {
+        get.script(mod.geturl(true), {
             onEnd: function () {
+                _log('load in onEnd', arguments);
                 cb();
-                _log('load in onEnd');
             },
             onNext: function () {
                 grep();
-                _log('load in onNext', mods.slice(0));
+                _log('load in onNext', mods.slice(0), mod);
                 _log('_mods', JSON.stringify(_mods));
+
+                if (mod) {
+                    mod.status = LOADED;
+                }
+
                 if (mods.length) {
                     mod = _mods[mods.shift()];
                     mod.status = LOADING;
-                    this.url.push(mod._geturl());
+                    this.url.push(mod.geturl(true));
                 }
             }
         });
     }, 0);
 }
 
-function get_or_init_m (n) {
-    var r = n.match(re_mod_name);
-    if (! r) throw 'module name [' + n + '] not valid';
-    n = r[1];
+function get_or_init_m (oname, ns) {
+    var m = oname.match(re_mod_name);
+    _log('get_or_init_m match', m);
+    if (! m) throw 'module name [' + oname + '] not valid';
+    var name = m[1];
 
-    if (n in _mods) return _mods[n];
+    // 如果给定 ns 是否替换模块当前 ns ？
+    // 假如 status === EMPTY 呢
+    if (name in _mods) return _mods[name];
 
-    return (_mods[n] = new ModuleDef({
-        name: n,
-        config: (r[2] || '_'),
-        status: EMPTY,
+    _modlist.push(name);
+    return (_mods[name] = new ModuleCfg({
+        name: name,
+        ns: (m[2] || ns || _dftns),
+        status: EMPTY
     }));
 }
 
@@ -243,8 +301,13 @@ module = function () {
         _log('warn: module [' + mod.name + '] load duplicate');
     }
 
+    if (mod.status !== LOADING) mod.byother = true;
     mod.status = LOADED;
-    mod.init = fn;
+    mod.init = function () {
+        if (this.status >= INIT) throw 'can not init module [' + this.name + '] inited';
+
+        return fn.apply(this, arguments);
+    };
 
     if (args.length) {
         mod.deps = [];
@@ -264,8 +327,17 @@ module = function () {
  */
 require = function () {
     var args = slice.call(arguments, 0),
-        cb = args[args.length - 1],
-        ret = [];
+        ret = [],
+        ns,
+        cb;
+
+    // 内部 magic 参数: 如果第1个参数是个数组，
+    // 那么数组的第1个值作为默认 ns 使用
+    if (args[0] && args[0].sort && args[0][0]) {
+        ns = args.shift()[0];
+    }
+
+    cb = args[args.length - 1];
 
     if (cb && cb.call) {
         args.pop();
@@ -283,7 +355,7 @@ require = function () {
 
     for (; i < iM; ++i) {
         dep = 0;
-        mod = get_or_init_m(args[i]);
+        mod = get_or_init_m(args[i], ns);
         ret[i] = mod;
 
         _log(JSON.stringify(mod));
@@ -301,7 +373,7 @@ require = function () {
         }
 
         for (i = 0; i < iM; ++i) {
-            ret[i] = ret[i]._getm();
+            ret[i] = ret[i].getm();
         }
 
         return iM == 1 ? ret[0] : ret;
@@ -318,9 +390,61 @@ require = function () {
     return false;
 };
 
-require.config = function (name, cfg) {
+/*
+ * require.config   - 配置 ns 参数，可以创建新的 ns
+ */
+require.config = function (ns, cfg) {
+    switch (arguments.length) {
+    case 2:
+        break;
+    case 1:
+        cfg = ns;
+        ns = _dftns;
+        break;
+    default:
+        throw 'require.config require 1-2 args';
+    }
+
+    if (cfg === null) cfg = _dftnscfg;
+
+    if (! (ns in _modns)) _modns[ns] = {};
+
+    _merge(_modns[ns], cfg);
+
+    return ns === _dftns ? require : require.ns(ns);
 };
 
+/*
+ * require.ns  - 创建1个以 ns 作为默认 ns 的 require
+ *
+ * require('a', 'b@x') 调用中，模块 a 的 ns 是 _ ，模块 b 的 ns 是 x
+ * require.ns('c')('a', 'b@x') 调用中，模块 a 的 ns 是 c ，模块 b 的 ns 是 x
+ */
+require.ns = function (ns) {
+    if (ns === _dftns) return require;
+
+    return function () {
+        var args = slice.call(arguments, 0);
+        args.unshift([ns]);
+
+        return require.apply(null, args);
+    };
+};
+
+
+require.clear = function (name, n) {
+    switch (arguments.length) {
+    case 2:
+        break;
+    case 1:
+        n = 1;
+        break;
+    default:
+        throw 'require.config require 1-2 args';
+    }
+
+    return _mods[name].clear(n);
+};
 
 module('yui.ua', function() {
     return (function(subUA) {
