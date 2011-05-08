@@ -7,9 +7,15 @@
     <script>
         // 这里调换 a, b 顺序会影响加载的 js 数量
         // 因为 c.js 里同时有模块 c 和 d 的定义
-        require('b', 'a', function (a, b) {
-            alert(require('a').a);
-            alert(require('b').a);
+
+        require.config('lib', {path: '../lib/?.js'});
+
+        var t1 = +new Date();
+        require('b', 'a', 'jquery-v16@lib', function (a, b) {
+            _log(require('a').a);
+            _log(require('b').a);
+            _log(require('jquery').jquery);
+            _log('load done',  +new Date() - t1);
         });
         module('a', 'c', 'b', function () {
             return {
