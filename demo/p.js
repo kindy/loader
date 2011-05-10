@@ -1,0 +1,117 @@
+#!/bin/env node
+
+var ugl = require('uglify-js'),
+    fs = require('fs'),
+    path = require('path');
+
+var _p = console.log,
+    _d = function () {
+        process.stderr.write(jsonit(arguments) + '\n');
+    },
+    jsonit = JSON.stringify;
+
+(function (module_file) {
+    if (! (module_file && path.existsSync(module_file))) {
+        d('Usage: $ ' + process.argv[0] + ': filename');
+        return;
+    }
+
+    var mtxt = fs.readFileSync(module_file, 'utf8');
+    var ast = ugl.parser.parse(mtxt);
+
+    var modified = false;
+
+    var stats = ast[1];
+
+    for (var i = 0; i < stats.length; i++) {
+        // [ 'stat', [ 'call', [ 'name', 'module' ], [ [Object] ] ] ]
+        var stat = stats[i];
+
+        _d('' + stat);
+        _d(stat, jsonit(stat), stat.toString());
+
+        if (stat.toString()
+            .indexOf("stat,call,name,module,") == 0) {
+
+            // stat:
+            // [ 'stat',
+            //   [ 'call',
+            //     [ 'name', 'module' ],
+            //     [ [Object], [Object], [Object] ] ] ]
+            var args = stat[1][2];
+
+            var lastarg = args[args.length - 1],
+                last2arg = args[args.length - 2];
+
+            if (lastarg[0] == 'object' && last2arg[0] == 'function') {
+                var cfg = lastarg[1];
+                var idx__embed = -1,
+                    idx_embed = -1;
+
+                for (var j = 0, jM = cfg.length; j < jM; ++j) {
+                    var jC = cfg[j];
+                    if (jC[0] == 'embed') {
+                        idx_embed = j;
+                    } else if (jC[0] == '_embed') {
+                        idx__embed = j;
+                    }
+                }
+                /* 0 1
+                [["embed",["array",[["string","p1.css"],["string","p2.less"]]]],["_embed",["object",[["a",["string","xx"]]]]]] */
+
+                if (idx_embed !== -1) {
+                    var embed = cfg[idx_embed],
+                    _embed;
+
+                    if (idx__embed === -1) {
+                        _embed = ["_embed", ["object", []]];
+                        cfg.push(_embed);
+                    } else {
+                        _embed = cfg[idx__embed];
+                    }
+
+                    cfg.splice(idx_embed, 1);
+
+                    _d(idx_embed, idx__embed);
+                    _d(jsonit(embed), jsonit(_embed));
+
+                    var _embedobj = _embed[1][1];
+                    embed[1][1].forEach(function (item) {
+                        var name = item[1],
+                        fname = module_file.replace(/(?:\.js)?$/, '_' + name),
+                        fcon;
+
+                        if (path.existsSync(fname)) {
+                            fcon = fs.readFileSync(fname, 'utf8');
+                            _embedobj.push([name, ["string", fcon]]);
+                        } else {
+                            fcon = null;
+                            _embedobj.push([name, ["name","null"]]);
+                        }
+
+                        _d(name, fname);
+                        _d(jsonit(fcon));
+                    });
+
+                    _d(_embedobj);
+                    _d(jsonit(_embedobj));
+                    modified = true;
+                }
+            }
+        }
+    }
+
+    var pro = ugl.uglify;
+    if (modified) {
+        if(0 && compress) {
+            ast = pro.ast_mangle(ast);
+            ast = pro.ast_squeeze(ast);
+        }
+    }
+
+    _p(pro.gen_code(ast, {
+        beautify: true,
+        indent_level: 4
+    }));
+})(process.argv[2]);
+
