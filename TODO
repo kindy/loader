@@ -1,5 +1,7 @@
   Mon May  9 23:27:19 CST 2011
 # require 的 cb 如果有 .length ，那么初始化加载的 module 给他
+  如果加载的 jquery-v16 里面的的模块定义是 module('jquery', fn)
+  这时候如何初始化？
 # 模块 url 路径查找支持 hash 和 自定义 geturl <config>
 
 

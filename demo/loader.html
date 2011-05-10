@@ -15,7 +15,7 @@
             _log(require('a').a);
             _log(require('b').a);
             _log(require('jquery').jquery);
-            _log('load done',  +new Date() - t1);
+            _warn('load done',  +new Date() - t1);
         });
         module('a', ['c', 'b'], function () {
             return {

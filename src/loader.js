@@ -303,7 +303,7 @@ function _load (mods, cb) {
                         _embed[iC] = null;
                         urls[lasturl.replace(/\.js\b/, '_' + iC)] =
                             [iC, _embed];
-                        _warn('xxx', mod, i, iM, iC, JSON.stringify(urls));
+                        _log('xxx', mod, i, iM, iC, JSON.stringify(urls));
                     }
                 }
             }
@@ -512,7 +512,10 @@ require = function () {
         return true;
     }
 
-    _load(missing, cb);
+    _load(missing, function () {
+        _warn(args, missing);
+        cb();
+    });
     return false;
 };
 
