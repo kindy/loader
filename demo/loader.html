@@ -17,12 +17,12 @@
             _log(require('jquery').jquery);
             _log('load done',  +new Date() - t1);
         });
-        module('a', 'c', 'b', function () {
+        module('a', ['c', 'b'], function () {
             return {
                 a: 'a'
             };
         });
-        module('b', 'c', function () {
+        module('b', ['d'], function () {
             return {
                 a: 'b'
             };

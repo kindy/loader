@@ -1,6 +1,10 @@
   Mon May  9 23:27:19 CST 2011
 # require 的 cb 如果有 .length ，那么初始化加载的 module 给他
 # 模块 url 路径查找支持 hash 和 自定义 geturl <config>
+
+
+= DONE
+  Tue May 10 19:13:50 CST 2011
 # module 的 deps 使用 []
 # require 的返回值受 module 调用中的 init 控制，如果 init 返回函数或者
   返回对象的 __only 为 true，那么直接用 init 的返回值作为 require 结果
@@ -13,4 +17,3 @@
   module('a', ['b'], function (mod) {
     mod.embed('m.css') -> get content of file /path/to/a_m.css
   }, {_embed: {'m.css': '', 'item.mu': '', 'i.gif': null}});
-

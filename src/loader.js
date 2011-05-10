@@ -3,6 +3,11 @@ function _log () {
         console.log.apply(console, arguments);
     } catch (ex) {}
 }
+function _warn () {
+    try {
+        console.warn.apply(console, arguments);
+    } catch (ex) {}
+}
 
 /*
  * loader
@@ -26,7 +31,8 @@ if (require || module) return;
  * }
  */
 var _mods = {},
-    _modlist = [];
+    _modlist = [],
+    _embds2load = [];
 
 var now = Date.now || (function() {
         return new Date().getTime();
@@ -49,13 +55,19 @@ var _dftns = '_',
 
     re_mod_name = /^([^@]+)(?:@(.+))?$/;
 
-function _merge (r, s) {
+function _merge (f, r, s) {
+    if (typeof f !== 'boolean') {
+        s = r;
+        r = f;
+        f = true;
+    }
+
     if (!s || !r) {
         return r || s;
     }
 
     for (var i in s) {
-        if (s.hasOwnProperty(i)) {
+        if (s.hasOwnProperty(i) && (f || !(i in r))) {
             r[i] = s[i];
         }
     }
@@ -86,6 +98,19 @@ _merge(ModuleDef.prototype, {
     },
     _getCfg: function () {
         return _mods[this._NAME];
+    },
+    embed: function (p) {
+        var embed = this._getCfg()._embed,
+            n = arguments.length;
+
+        if (n === 0) return embed;
+        if (n === 1) return embed[p];
+
+        var ret = [];
+        for (var i = 0; i < n; ++i) {
+            ret.push(embed[arguments[i]]);
+        }
+        return ret;
     }
 });
 
@@ -93,6 +118,11 @@ function ModuleCfg (cfg) {
     _merge(this, cfg);
 }
 _merge(ModuleCfg.prototype, {
+    init: function () {
+        if (this.status >= INIT) throw 'can not init module [' + this.name + '] inited';
+
+        return this._init.apply(this, arguments);
+    },
     geturl: function (rload) {
         var path = _modns[this.ns].path;
         var url = path.replace(/\?/, this.name.replace(/\./g, '/'));
@@ -104,10 +134,15 @@ _merge(ModuleCfg.prototype, {
             }
         }
 
+        if (rload) {
+            this.lasturl = url;
+        }
+        _log(url);
+
         return url;
     },
-    clear: function (n) {
-        if (n >= 1) {
+    clear: function (level) {
+        if (level >= 1) {
             delete this.export;
 
             if (this.module.__clear) {
@@ -118,14 +153,14 @@ _merge(ModuleCfg.prototype, {
             this.status = LOADED;
         }
 
-        if (n >= 2) {
+        if (level >= 2) {
             delete this.init;
             delete this.byother;
             delete this.deps;
             this.status = EMPTY;
         }
 
-        if (n >= 3) {
+        if (level >= 3) {
             this.nocache = true;
         }
 
@@ -142,10 +177,19 @@ _merge(ModuleCfg.prototype, {
             throw 'module [' + mod.name + '] not ok for get';
         }
 
-        var m = new ModuleDef(mod.name);
+        var m = new ModuleDef(mod.name),
+            exp = mod.init(m);
+        mod.export = exp;
 
-        mod.export = mod.init();
-        _merge(m, mod.export);
+        // require 的返回值受 module 调用中的 init 控制，如果 init 返回函数或者
+        // 返回对象的 __only 为 true，那么直接用 init 的返回值作为 require 结果
+        if (exp && (exp.call || exp.__only)) {
+            _merge(false, exp, m);
+            m = exp;
+        } else {
+            _merge(m, exp);
+        }
+
         mod.status = INIT;
         mod.module = m;
 
@@ -228,13 +272,71 @@ function _load (mods, cb) {
     }
     _log('need load', mods.slice(0), cb);
 
+    var _dyn_embed_checked = false;
+    var ajax = require('miniajax');
+    function _check_dyn_embed () {
+        if (_dyn_embed_checked) throw 'do not call _check_dyn_embed more than 1';
+
+        _dyn_embed_checked = true;
+
+        if (! _embds2load.length) {
+            return cb();
+        } else {
+            //TODO load all embed and then cb()
+            // 'url1': [name, _embed]
+            var urls = {},
+                mname,
+                mod,
+                embed,
+                _embed,
+                mloaded = {},
+                lasturl;
+            _log('_check_dyn_embed _embds2load ->', JSON.stringify(_embds2load));
+            while (mname = _embds2load.shift()) {
+                if (!(mname in mloaded) && (mod = _mods[mname]) &&
+                        (lasturl = mod.lasturl) &&
+                        (_embed = mod._embed) &&
+                        (embed = mod.embed) && embed.length) {
+                    mloaded[mname] = true;
+                    for (var i = 0, iM = embed.length, iC; i < iM; ++i) {
+                        iC = embed[i];
+                        _embed[iC] = null;
+                        urls[lasturl.replace(/\.js\b/, '_' + iC)] =
+                            [iC, _embed];
+                        _warn('xxx', mod, i, iM, iC, JSON.stringify(urls));
+                    }
+                }
+            }
+
+            _log('_check_dyn_embed urls ->', JSON.stringify(urls));
+            // 读取 embed 内容计数
+            var n = 0;
+            for (var url in urls) {
+                ++n;
+                ajax.get(url, (function (url, cfg) {
+                    //cfg -> [embed-name, _embed to insert]
+                    return function (c, xhr) {
+                        --n;
+                        if (xhr.status == 200) {
+                            cfg[1][cfg[0]] = c;
+                        }
+                        if (n <= 0) {
+                            cb();
+                        }
+                    };
+                })(url, urls[url]));
+            }
+        }
+    }
+
     // 对于 inline <script ， setTimeout 是必要的，
     // 可以让 require 后续的 module 定义加载进来
-    setTimeout(function go () {
+    setTimeout(function _in_load () {
         grep();
         _log('first time in _load', mods.slice(0));
+
         var modname = mods.shift();
-        if (! modname) return cb();
+        if (! modname) return _check_dyn_embed();
 
         var mod = _mods[modname];
 
@@ -244,7 +346,8 @@ function _load (mods, cb) {
         get.script(mod.geturl(true), {
             onEnd: function () {
                 _log('load in onEnd', arguments);
-                cb();
+
+                return _check_dyn_embed();
             },
             onNext: function () {
                 grep();
@@ -285,17 +388,37 @@ function get_or_init_m (oname, ns) {
 
 /*
  * module('a', init)
- * module('a', 'b', 'c', init)
+ * module('a', init, {})
+ * module('a', ['b'], init)
+ * module('a', ['b'], init, {})
  */
 module = function () {
     var args = slice.call(arguments, 0),
-        fn = args.pop(),
-        n = args.shift();
+        cfg,
+        deps,
+        fn,
+        name;
+
+    if (args.length < 2) throw 'module() require 2+ args';
+
+    fn = args.pop();
+    if (! (fn && fn.call)) {
+        cfg = fn;
+        fn = args.pop();
+    }
+
+    name = args.shift()
 
     if (! (fn && fn.call)) throw 'module() must have a factory function';
-    if (! n) throw 'module() must have a name';
+    if (! name) throw 'module() must have a name';
 
-    var mod = get_or_init_m(n);
+    if (args.length) {
+        deps = args.pop();
+    }
+
+    var mod = get_or_init_m(name);
+    cfg && _merge(mod, cfg);
+
     //TODO 重复加载 模块 ，如何处理
     if (mod.status >= LOADED) {
         _log('warn: module [' + mod.name + '] load duplicate');
@@ -303,17 +426,20 @@ module = function () {
 
     if (mod.status !== LOADING) mod.byother = true;
     mod.status = LOADED;
-    mod.init = function () {
-        if (this.status >= INIT) throw 'can not init module [' + this.name + '] inited';
+    mod._init = fn;
 
-        return fn.apply(this, arguments);
-    };
-
-    if (args.length) {
+    if (deps) {
         mod.deps = [];
-        for (var i = 0, iM = args.length; i < iM; ++i) {
-            mod.deps[i] = get_or_init_m(args[i]).name;
+        for (var i = 0, iM = deps.length; i < iM; ++i) {
+            mod.deps[i] = get_or_init_m(deps[i]).name;
         }
+    }
+
+    if (mod.embed && mod.embed.length) {
+        if (! mod._embed) {
+            mod._embed = {};
+        }
+        _embds2load.push(name);
     }
 };
 
@@ -432,21 +558,39 @@ require.ns = function (ns) {
 };
 
 
-require.clear = function (name, n) {
+require.clear = function (name, level) {
     switch (arguments.length) {
     case 2:
         break;
     case 1:
-        n = 1;
+        level = 1;
         break;
     default:
         throw 'require.config require 1-2 args';
     }
 
-    return _mods[name].clear(n);
+    return _mods[name].clear(level);
 };
 
-module('yui.ua', function() {
+module('miniajax', function (mod) {
+/*
+name: miniajax
+homepage: http://code.google.com/p/miniajax/
+
+modified
+*/
+
+    var ajax={};
+    ajax.x=function(){try{return new ActiveXObject('Msxml2.XMLHTTP')}catch(e){try{return new ActiveXObject('Microsoft.XMLHTTP')}catch(e){return new XMLHttpRequest()}}};
+    ajax.send=function(u,f,m,a){var x=ajax.x();x.open(m,u,true);x.onreadystatechange=function(){if(x.readyState==4)f(x.responseText, x)};if(m=='POST')x.setRequestHeader('Content-type','application/x-www-form-urlencoded');x.send(a)};
+    ajax.get=function(url,func){ajax.send(url,func,'GET', null)};
+    ajax.syncget=function(url){var x=ajax.x();x.open('GET',url,false);x.send(null);return x.responseText};
+    ajax.post=function(url,func,args){ajax.send(url,func,'POST',args)};
+
+    return ajax;
+});
+
+module('yui.ua', function () {
     return (function(subUA) {
         var numberify = function(s) {
                 var c = 0;
