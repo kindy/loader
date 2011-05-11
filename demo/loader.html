@@ -14,7 +14,10 @@
         require('b', 'a', 'jquery-v16@lib', function (a, b) {
             _log(require('a').a);
             _log(require('b').a);
-            _log(require('jquery').jquery);
+            var $ = require('jquery').jquery;
+            $('<div />').html('<p>jquery load done</p>').appendTo(document.body)
+                .append('<p>b load done</p>')
+                .append('<p>a load done</p>');
             _warn('load done',  +new Date() - t1);
         });
         module('a', ['c', 'b'], function () {
