@@ -1,11 +1,11 @@
-function _log () {
+function _log (a, b, c, d, e, f) {
     try {
-        console.log.apply(console, arguments);
+    console.log(a || '', b || '', c || '', d || '', e || '', f || '');
     } catch (ex) {}
 }
-function _warn () {
+function _warn (a, b, c, d, e, f) {
     try {
-        console.warn.apply(console, arguments);
+    console.warn(a || '', b || '', c || '', d || '', e || '', f || '');
     } catch (ex) {}
 }
 
@@ -18,16 +18,29 @@ var require, module;
 if (require || module) return;
 
 /*
- * module object
+ * module config object
  * {
  *  name: "a",                  - 模块名称
- *  ns: "_",                    - 模块使用的配置，影响模块行为和加载路径
+ *  ns: "_",                    - 模块使用的配置，影响加载行为
  *  status: EMPTY|LOADING|LOADED|INIT,  - 状态
  *  deps: ["b", "c"],           - 依赖列表
  *  init: fn,                   - 初始化函数，此函数非传给 module 的函数，被包了
- *  getm: function () {}       - (初始化并)获取模块
- *  geturl: function () {}     - 获取加载地址
+ *  getm: function () {}        - (初始化并)获取模块
+ *  geturl: function () {}      - 获取加载地址
  *  byother: true|false         - 是否通过独立的 js 加载的
+ *                                通常独立加载的才能动态读取embed
+ *  embed:
+ *  _embed:
+ * }
+ *
+ * module fn
+ * {
+ *  _M: module object
+ *  _NAME: "a"
+ *  _getCfg: function () {}
+ *  embed: function () {}
+ *
+ *  ...... by defined
  * }
  */
 var _mods = {},
@@ -143,7 +156,7 @@ _merge(ModuleCfg.prototype, {
     },
     clear: function (level) {
         if (level >= 1) {
-            delete this.export;
+            delete this.exports;
 
             if (this.module.__clear) {
                 this.module.__clear();
@@ -179,10 +192,11 @@ _merge(ModuleCfg.prototype, {
 
         var m = new ModuleDef(mod.name),
             exp = mod.init(m);
-        mod.export = exp;
+        mod.exports = exp;
 
         // require 的返回值受 module 调用中的 init 控制，如果 init 返回函数或者
         // 返回对象的 __only 为 true，那么直接用 init 的返回值作为 require 结果
+        // 无论如何，ModuleDef 里的各种方法都会 append 到 mod 里
         if (exp && (exp.call || exp.__only)) {
             _merge(false, exp, m);
             m = exp;
@@ -198,7 +212,7 @@ _merge(ModuleCfg.prototype, {
 });
 
 function check_deps (mod, alldeps) {
-    _log('check_deps', mod.name, JSON.stringify(alldeps));
+    //_log('check_deps', mod.name, JSON.stringify(alldeps));
 
     var modname = mod.name;
 
@@ -291,7 +305,7 @@ function _load (mods, cb) {
                 _embed,
                 mloaded = {},
                 lasturl;
-            _log('_check_dyn_embed _embds2load ->', JSON.stringify(_embds2load));
+            //_log('_check_dyn_embed _embds2load ->', JSON.stringify(_embds2load));
             while (mname = _embds2load.shift()) {
                 if (!(mname in mloaded) && (mod = _mods[mname]) &&
                         (lasturl = mod.lasturl) &&
@@ -303,20 +317,22 @@ function _load (mods, cb) {
                         _embed[iC] = null;
                         urls[lasturl.replace(/\.js\b/, '_' + iC)] =
                             [iC, _embed];
-                        _log('xxx', mod, i, iM, iC, JSON.stringify(urls));
+                        //_log('xxx', mod, i, iM, iC, JSON.stringify(urls));
                     }
                 }
             }
 
-            _log('_check_dyn_embed urls ->', JSON.stringify(urls));
+            //_log('_check_dyn_embed urls ->', JSON.stringify(urls));
             // 读取 embed 内容计数
-            var n = 0;
+            var n = 0,
+                url2get = [];
             for (var url in urls) {
                 ++n;
-                ajax.get(url, (function (url, cfg) {
+                url2get.push([url, (function (url, cfg) {
                     //cfg -> [embed-name, _embed to insert]
                     return function (c, xhr) {
                         --n;
+                        _log('fetch url done->', url, 'n->', n);
                         if (xhr.status == 200) {
                             cfg[1][cfg[0]] = c;
                         }
@@ -324,7 +340,12 @@ function _load (mods, cb) {
                             cb();
                         }
                     };
-                })(url, urls[url]));
+                })(url, urls[url])]);
+            }
+            // ie 的 ajax 请求发送的太快，直接就 返回了，所以xxx
+            for (var i = 0, iM = n; i < iM; ++i) {
+                _log('fetch url ->', url2get[i]);
+                ajax.get(url2get[i][0], url2get[i][1]);
             }
         }
     }
@@ -352,7 +373,7 @@ function _load (mods, cb) {
             onNext: function () {
                 grep();
                 _log('load in onNext', mods.slice(0), mod);
-                _log('_mods', JSON.stringify(_mods));
+                //_log('_mods', JSON.stringify(_mods));
 
                 if (mod) {
                     mod.status = LOADED;
@@ -391,6 +412,10 @@ function get_or_init_m (oname, ns) {
  * module('a', init, {})
  * module('a', ['b'], init)
  * module('a', ['b'], init, {})
+ *
+ * config -> {
+ *  embed: [file1, file2] -> module-fetch-url.replace(/\.js\b/, '_' + filename)
+ * }
  */
 module = function () {
     var args = slice.call(arguments, 0),
@@ -484,7 +509,7 @@ require = function () {
         mod = get_or_init_m(args[i], ns);
         ret[i] = mod;
 
-        _log(JSON.stringify(mod));
+        //_log(JSON.stringify(mod));
         if (mod.status < LOADED) {
             missing.push(mod.name);
         } else if (mod.status < INIT && (dep = check_deps(mod)) !== true) {
@@ -540,16 +565,16 @@ require.config = function (ns, cfg) {
 
     _merge(_modns[ns], cfg);
 
-    return ns === _dftns ? require : require.ns(ns);
+    return ns === _dftns ? require : require.at(ns);
 };
 
 /*
- * require.ns  - 创建1个以 ns 作为默认 ns 的 require
+ * require.at  - 创建1个以 ns 作为默认 ns 的 require
  *
  * require('a', 'b@x') 调用中，模块 a 的 ns 是 _ ，模块 b 的 ns 是 x
- * require.ns('c')('a', 'b@x') 调用中，模块 a 的 ns 是 c ，模块 b 的 ns 是 x
+ * require.at('c')('a', 'b@x') 调用中，模块 a 的 ns 是 c ，模块 b 的 ns 是 x
  */
-require.ns = function (ns) {
+require.at = function (ns) {
     if (ns === _dftns) return require;
 
     return function () {
@@ -559,7 +584,6 @@ require.ns = function (ns) {
         return require.apply(null, args);
     };
 };
-
 
 require.clear = function (name, level) {
     switch (arguments.length) {

@@ -17,8 +17,8 @@
             var $ = require('jquery').jquery;
             $('<div />').html('<p>jquery load done</p>').appendTo(document.body)
                 .append('<p>b load done</p>')
-                .append('<p>a load done</p>');
-            _warn('load done',  +new Date() - t1);
+                .append('<p>a load done</p>')
+                .append('<p>load done ' + (+new Date() - t1) + 'ms</p>');
         });
         module('a', ['c', 'b'], function () {
             return {
