@@ -2,10 +2,14 @@
 # require 的 cb 如果有 .length ，那么初始化加载的 module 给他
   如果加载的 jquery-v16 里面的的模块定义是 module('jquery', fn)
   这时候如何初始化？
-# 模块 url 路径查找支持 hash 和 自定义 geturl <config>
+# 模块名支持 alias
+# url 映射支持 自定义 geturl
 
 
 = DONE
+  Sat May 14 11:23:52 CST 2011
+# 依赖支持并行载入
+
   Tue May 10 19:13:50 CST 2011
 # module 的 deps 使用 []
 # require 的返回值受 module 调用中的 init 控制，如果 init 返回函数或者

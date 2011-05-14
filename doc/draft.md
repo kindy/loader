@@ -47,3 +47,8 @@
 * require.config
 * require.at
 
+# tool
+
+* embed.js -> node 脚本，支持将 module 定义中的 embed 文件嵌入 module
+    node embed.js {path/to/module.js}
+
