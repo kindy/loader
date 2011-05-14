@@ -1,12 +1,14 @@
   Mon May  9 23:27:19 CST 2011
-# require 的 cb 如果有 .length ，那么初始化加载的 module 给他
-  如果加载的 jquery-v16 里面的的模块定义是 module('jquery', fn)
-  这时候如何初始化？
-# 模块名支持 alias
-# url 映射支持 自定义 geturl
+# 模块名支持 alias - 打包时候用到
+# url 映射支持 自定义 geturl - 使用 combo 特性时候用到
 
 
 = DONE
+  Sat May 14 22:37:08 CST 2011
+# require 的 cb 如果有 .length ，那么初始化加载的 module 给他
+  如果加载的 jquery-v16 里面的的模块定义是 module('jquery', fn)
+  这时候如何初始化？
+  module(name, factory, cfg) 的 cfg 里面支持 provide (提供文件名所定义的伪模块即可)
   Sat May 14 11:23:52 CST 2011
 # 依赖支持并行载入
 

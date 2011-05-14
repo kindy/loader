@@ -181,7 +181,7 @@ _merge(ModuleCfg.prototype, {
 
         return this;
     },
-    getm: function () {
+    getm: function (safe) {
         var mod = this;
 
         if (mod.module) {
@@ -189,6 +189,8 @@ _merge(ModuleCfg.prototype, {
         }
 
         if (mod.status < LOADED || check_deps(mod) !== true) {
+            if (safe) return null;
+
             throw 'module [' + mod.name + '] not ok for get';
         }
 
@@ -356,7 +358,10 @@ function _load (mods, cb) {
 
     // 对于 inline <script ， setTimeout 是必要的，
     // 可以让 require 后续的 module 定义加载进来
+    var _in_load_count = 0;
     setTimeout(function _in_load () {
+        if ((++_in_load_count) >= 10) throw 'too many load for require';
+
         grep();
 
         var n = mods.length;
@@ -375,6 +380,8 @@ function _load (mods, cb) {
                     _log('js load, m ->', m);
                     m.status = LOADED;
                     if (n <= 0) {
+                        // 把当前待加载的全部加载完
+                        // 继续看还有没有要加载的
                         cb();
                     }
                 }, 0, 0, [mod]);
@@ -413,6 +420,7 @@ function get_or_init_m (oname, ns) {
  *
  * config -> {
  *  embed: [file1, file2] -> module-fetch-url.replace(/\.js\b/, '_' + filename)
+ *  provide: ['']
  * }
  */
 module = function () {
@@ -458,6 +466,18 @@ module = function () {
         }
     }
 
+    if (mod.provide && mod.provide.length) {
+        for (var i = mod.provide.length - 1, _m; i >= 0; --i) {
+            _m = mod.provide[i];
+            if (_m in _mods) {
+                if (_mods[_m].init) {
+                    _warn('mod [' + _m + '] has init, maybe you use wrong provide');
+                }
+                mod.provide[i] = _mods[_m];
+            }
+            _mods[_m] = mod;
+        }
+    }
     if (mod.embed && mod.embed.length) {
         if (! mod._embed) {
             mod._embed = {};
@@ -528,16 +548,28 @@ require = function () {
         return iM == 1 ? ret[0] : ret;
     }
 
+    // 加载模式
+
+    // 自动加载 require 的所有模块
+    // 允许 null
+    function alldone () {
+        var i,
+            iM = cb.length;
+        var cbargs = [];
+        for (i = 0; i < iM; ++i) {
+            cbargs[i] = ret[i].getm(true);
+        }
+        return cb.apply(null, cbargs);
+        cbargs = null;
+    }
     if (! missing.length) {
-        // 自动加载 require 的所有模块 ?
-        // cb.apply(null, mods);
-        cb();
+        alldone();
         return true;
     }
 
     _load(missing, function () {
         _warn(args, missing);
-        cb();
+        return alldone();
     });
     return false;
 };
