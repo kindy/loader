@@ -10,16 +10,29 @@
 
         require.config('lib', {path: '../lib/?.js'});
 
-        var t1 = +new Date();
-        require('b', 'a', 'jquery-v16@lib', function (a, b) {
-            _log(require('a').a);
-            _log(require('b').a);
-            var $ = require('jquery').jquery;
-            $('<div />').html('<p>jquery load done</p>').appendTo(document.body)
-                .append('<p>b load done</p>')
-                .append('<p>a load done</p>')
-                .append('<p>load done ' + (+new Date() - t1) + 'ms</p>');
-        });
+        window.onload = function () {
+            document.getElementById('xx').onclick = function () {
+                console.time('load');
+                console.profile('load');
+                require('b', 'a', 'jquery-v16@lib', function (a, b) {
+                    console.timeEnd('load');
+                    console.profileEnd('load');
+                    console.time('a');
+                    _log(require('a').a);
+                    console.timeEnd('a');
+                    console.time('b');
+                    _log(require('b').a);
+                    console.timeEnd('b');
+                    console.time('jquery');
+                    var $ = require('jquery').jquery;
+                    console.timeEnd('jquery');
+                    $('<div style="float: left;" />').html('<p>jquery load done</p>').appendTo(document.body)
+                        .append('<p>b load done</p>')
+                        .append('<p>a load done</p>');
+                });
+            };
+        };
+
         module('a', ['c', 'b'], function () {
             return {
                 a: 'a'
@@ -33,5 +46,6 @@
     </script>
 </head>
 <body>
+    <input id="xx" type="button" value="xx">
 </body>
 </html>
