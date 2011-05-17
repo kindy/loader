@@ -371,7 +371,7 @@ function _load (mods, cb) {
         } else {
             var mod;
             for (var i = 0, iM = n; i < iM; ++i) {
-                mod = _mods[mods.shift()];
+                mod = _mods[mods[i]];
                 _log('fetch js url ->', mod.geturl());
                 //get(url, callback, charset, timeout)
                 mod.status = LOADING;
