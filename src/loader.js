@@ -33,11 +33,11 @@ if (require || module) return;
  *                                通常独立加载的才能动态读取embed
  *  embed:
  *  _embed:
+ *  autoinit
  * }
  *
  * module fn
  * {
- *  _M: module object
  *  _NAME: "a"
  *  _getCfg: function () {}
  *  embed: function () {}
@@ -100,7 +100,6 @@ function ModuleDef (name) {
     }
 
     m._NAME = name;
-    m._M = m;
 
     _merge(m, ModuleDef.prototype);
 
@@ -201,12 +200,15 @@ _merge(ModuleCfg.prototype, {
         // require 的返回值受 module 调用中的 init 控制，如果 init 返回函数或者
         // 返回对象的 __only 为 true，那么直接用 init 的返回值作为 require 结果
         // 无论如何，ModuleDef 里的各种方法都会 append 到 mod 里
-        if (exp && (exp.call || exp.__only)) {
+        if (exp && (exp.call || exp.prototype || exp.__only)) {
             _merge(false, exp, m);
             m = exp;
         } else {
             _merge(m, exp);
         }
+
+        // 无论如何， 这个属性必须对
+        m._NAME = mod.name;
 
         mod.status = INIT;
         mod.module = m;
@@ -217,6 +219,8 @@ _merge(ModuleCfg.prototype, {
 
 function check_deps (mod, alldeps) {
     //_log('check_deps', mod.name, JSON.stringify(alldeps));
+
+    if (mod.alldeps_done) return true;
 
     var modname = mod.name;
 
@@ -235,7 +239,10 @@ function check_deps (mod, alldeps) {
     alldeps[modname] = 1;
 
     deps = mod.deps;
-    if (!deps || !deps.length) return true;
+    if (!deps || !deps.length) {
+        mod.alldeps_done = true;
+        return true;
+    }
 
     for (var i = 0, iM = deps.length; i < iM; ++i) {
         var dep = deps[i],
@@ -253,11 +260,17 @@ function check_deps (mod, alldeps) {
         }
     }
 
-    return ret.length ? ret : true;
+    if (ret.length) {
+        return ret;
+    } else {
+        mod.alldeps_done = true;
+        return true;
+    }
 }
 
 function _load (mods, cb) {
-    var get = require('seajs.asset.get').getAsset;
+    var get = require('seajs.asset.get').getAsset,
+        _loads = [];
 
     function grep () {
         var ret = [],
@@ -289,6 +302,7 @@ function _load (mods, cb) {
         }
 
         mods = ret.slice(0);
+        _loads.push.apply(_loads, mods);
         _h = mod = dep = ret = null;
     }
     _log('need load', mods.slice(0), cb);
@@ -300,13 +314,22 @@ function _load (mods, cb) {
 
         _dyn_embed_checked = true;
 
+        // 代码加载完成前 的处理
+        var i, mod;
+        for (i = _loads.length - 1; i >= 0; --i) {
+            mod = _mods[_loads[i]];
+            if (mod.autoinit) {
+                mod.getm();
+            }
+        }
+        mod = null;
+
         if (! _embds2load.length) {
             return cb();
         } else {
             // 'url1': [name, _embed]
             var urls = {},
                 mname,
-                mod,
                 embed,
                 _embed,
                 mloaded = {},
@@ -421,6 +444,7 @@ function get_or_init_m (oname, ns) {
  * config -> {
  *  embed: [file1, file2] -> module-fetch-url.replace(/\.js\b/, '_' + filename)
  *  provide: ['']
+ *  autoinit: true -> 自动初始化
  * }
  */
 module = function () {
