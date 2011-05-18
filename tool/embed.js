@@ -78,8 +78,8 @@ var _p = console.log,
                     var _embedobj = _embed[1][1];
                     embed[1][1].forEach(function (item) {
                         var name = item[1],
-                        fname = module_file.replace(/(?:\.js)?$/, '_' + name),
-                        fcon;
+                            fname = module_file.replace(/[^\/]+$/, '') + name,
+                            fcon;
 
                         if (path.existsSync(fname)) {
                             fcon = fs.readFileSync(fname, 'utf8');

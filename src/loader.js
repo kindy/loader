@@ -344,7 +344,7 @@ function _load (mods, cb) {
                     for (var i = 0, iM = embed.length, iC; i < iM; ++i) {
                         iC = embed[i];
                         _embed[iC] = null;
-                        urls[lasturl.replace(/\.js\b/, '_' + iC)] =
+                        urls[lasturl.replace(/[^\/]+$/, '') + iC] =
                             [iC, _embed];
                         //_log('xxx', mod, i, iM, iC, JSON.stringify(urls));
                     }

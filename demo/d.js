@@ -4,7 +4,7 @@ module('d', ['c'], function (mod) {
     return {
         a: 'd'
     };
-}, {embed: ['p1.css', 'p2.less'], _embed: {'a': '', 'b': null}})
+}, {embed: ['d_p1.css', 'd_p2.less'], _embed: {'a': '', 'b': null}})
 
 module('d.a', ['c'], function (mod) {
     var res = mod.embed('p1.css');
