@@ -248,7 +248,9 @@ function check_deps (mod, alldeps) {
         var dep = deps[i],
             depmod = _mods[dep];
 
-        if (dep in alldeps) return true;
+        if (dep in alldeps) {
+            continue;
+        }
         alldeps[dep] = 1;
 
         if (depmod.status >= INIT) {
@@ -307,16 +309,11 @@ function _load (mods, cb) {
     }
     _log('need load', mods.slice(0), cb);
 
-    var _dyn_embed_checked = false;
-    var ajax = require('miniajax');
-    function _check_dyn_embed () {
-        if (_dyn_embed_checked) throw 'do not call _check_dyn_embed more than 1';
 
-        _dyn_embed_checked = true;
-
-        // 代码加载完成前 的处理
-        var i, mod;
-        for (i = _loads.length - 1; i >= 0; --i) {
+    // 代码加载完成前 的处理
+    function final_cb () {
+        var i, iM, mod;
+        for (i = 0, iM = _loads.length; i < iM; ++i) {
             mod = _mods[_loads[i]];
             if (mod.autoinit) {
                 mod.getm();
@@ -324,8 +321,17 @@ function _load (mods, cb) {
         }
         mod = null;
 
+        cb.apply(this, arguments);
+    }
+    var _dyn_embed_checked = false;
+    var ajax = require('miniajax');
+    function _check_dyn_embed () {
+        if (_dyn_embed_checked) throw 'do not call _check_dyn_embed more than 1';
+
+        _dyn_embed_checked = true;
+
         if (! _embds2load.length) {
-            return cb();
+            return final_cb();
         } else {
             // 'url1': [name, _embed]
             var urls = {},
@@ -366,7 +372,7 @@ function _load (mods, cb) {
                             cfg[1][cfg[0]] = c;
                         }
                         if (n <= 0) {
-                            cb();
+                            final_cb();
                         }
                     };
                 })(url, urls[url])]);
@@ -400,7 +406,7 @@ function _load (mods, cb) {
                 mod.status = LOADING;
                 get(mod.geturl(true), function (m) {
                     --n;
-                    _log('js load, m ->', m);
+                    m = m;
                     m.status = LOADED;
                     if (n <= 0) {
                         // 把当前待加载的全部加载完
@@ -592,7 +598,7 @@ require = function () {
     }
 
     _load(missing, function () {
-        _warn(args, missing);
+        //_warn(args, missing);
         return alldone();
     });
     return false;
@@ -713,7 +719,7 @@ module('seajs.asset.get', function(util) {
         if (charset) node.setAttribute('charset', charset);
 
         assetOnload(node, function() {
-            if (callback) callback.call(node, args || []);
+            if (callback) callback.apply(node, args || []);
             if (isCSS) return;
 
             // Reduces memory leak.
