@@ -107,8 +107,7 @@ function ModuleDef (name) {
 }
 _merge(ModuleDef.prototype, {
     toString: function () {
-        var ns = this._getCfg().ns;
-        return 'module [' + this._NAME + (ns === _dftns ? '' : ('@' + ns)) + ']';
+        return 'module [' + this._getCfg().fullname() + ']';
     },
     _getCfg: function () {
         return _mods[this._NAME];
@@ -214,6 +213,10 @@ _merge(ModuleCfg.prototype, {
         mod.module = m;
 
         return m;
+    },
+    fullname: function () {
+        var ns = this.ns;
+        return this.name + (ns === _dftns ? '' : ('@' + ns));
     }
 });
 
@@ -514,6 +517,27 @@ module = function () {
         }
         _embds2load.push(name);
     }
+};
+
+module._genDepsDot = function () {
+    var ms = _mods,
+        ret = [];
+
+    ret.push('digraph deps {');
+    for (var n in ms) {
+        var m = ms[n],
+            mdeps = m.deps;
+        if (! (mdeps && mdeps.length)) {
+            ret.push('"' + m.fullname() + '"');
+            continue;
+        }
+        for (var i = 0, iM = mdeps.length; i < iM; ++i) {
+            ret.push('"' + m.fullname() + '" -> "' + ms[mdeps[i]].fullname() + '"');
+        }
+    }
+    ret.push('}');
+
+    return ret.join('\n');
 };
 
 
