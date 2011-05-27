@@ -68,7 +68,60 @@ var _dftns = '_',
     LOADED = 3,
     INIT = 4,
 
-    re_mod_name = /^([^@]+)(?:@(.+))?$/;
+    re_mod_name = /^([^@]+)(?:@(.+))?$/,
+
+    // from jquery/ajax
+    re_hostname = /^([\w\+\.\-]+:)(?:\/\/([^\/?#:]*)(?::(\d+))?)?/,
+	ajaxLocation = location.href,
+    ajaxLocParts = re_hostname.exec( ajaxLocation.toLowerCase() ) || [];
+
+
+// from jquery/ajax
+function is_crossdomain (url) {
+    var parts = re_hostname.exec(url.toLowerCase());
+    return !!( parts &&
+        ( parts[ 1 ] != ajaxLocParts[ 1 ] || parts[ 2 ] != ajaxLocParts[ 2 ] ||
+            ( parts[ 3 ] || ( parts[ 1 ] === "http:" ? 80 : 443 ) ) !=
+                ( ajaxLocParts[ 3 ] || ( ajaxLocParts[ 1 ] === "http:" ? 80 : 443 ) ) )
+    );
+}
+
+/*
+ * 这里的代码超级垃圾，待更新
+ */
+var _embed_load = {},
+    _embed_load_idx = 0;
+function on_embed_load (res) {
+//res -> status, id, body
+    _warn('on_embed_load ->', res);
+    var id;
+    if (res && (id = res.id) && _embed_load[id]) {
+        _embed_load[id][1](res.body, {status: res.status});
+        delete _embed_load[id];
+    }
+}
+module_embedx = on_embed_load;
+
+function get_embed_x (url, cb) {
+    var get = require('seajs.asset.get').getAsset;
+
+    var host,
+        file;
+    file = url.replace(re_hostname, function (m) {
+        host = m;
+        return '';
+    });
+
+    var id = ++_embed_load_idx,
+        ctx = [url, cb];
+    _embed_load[id] = ctx;
+
+    // /libjs-xss-get?_c=x&url=/lib/master/demo/a.txt&id=a
+    get(host +
+        '/libjs-xss-get?_c=module_embedx' +
+        '&id=' + id +
+        '&url=' + encodeURIComponent(file));
+}
 
 function _merge (f, r, s) {
     if (typeof f !== 'boolean') {
@@ -381,9 +434,16 @@ function _load (mods, cb) {
                 })(url, urls[url])]);
             }
             // ie 的 ajax 请求发送的太快，直接就 返回了，所以xxx
+            var url,
+                cb;
             for (var i = 0, iM = n; i < iM; ++i) {
-                _log('fetch url ->', url2get[i]);
-                ajax.get(url2get[i][0], url2get[i][1]);
+                url = url2get[i][0];
+                cb = url2get[i][1];
+                if (is_crossdomain(url)) {
+                    get_embed_x(url, cb);
+                } else {
+                    ajax.get(url, cb);
+                }
             }
         }
     }

@@ -1,0 +1,19 @@
+location = /libjs-xss-get {
+    xss_get on;
+    xss_callback_arg _c;
+    expires 0;
+
+    default_type 'application/json';
+
+    content_by_lua "
+        local yajl = require 'yajl'
+        local u = ngx.unescape_uri(ngx.var.arg_url)
+        local res = ngx.location.capture(u)
+
+        ngx.print(yajl.to_string({
+            id = ngx.var.arg_id,
+            status = res.status,
+            body = res.body,
+        }))
+    ";
+}
