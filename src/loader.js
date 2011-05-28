@@ -583,16 +583,20 @@ module._genDepsDot = function () {
     var ms = _mods,
         ret = [];
 
-    ret.push('digraph deps {');
+        //splines=false;
+    ret.push('digraph deps {',
+        'rankdir=LR;',
+        'concentrate=true;'
+    );
     for (var n in ms) {
         var m = ms[n],
             mdeps = m.deps;
         if (! (mdeps && mdeps.length)) {
-            ret.push('"' + m.fullname() + '"');
+            ret.push('"' + m.fullname() + '" [shape=box]');
             continue;
         }
         for (var i = 0, iM = mdeps.length; i < iM; ++i) {
-            ret.push('"' + m.fullname() + '" -> "' + ms[mdeps[i]].fullname() + '"');
+            ret.push('"' + m.fullname() + '" -> "' + ms[mdeps[i]].fullname() + '";');
         }
     }
     ret.push('}');
