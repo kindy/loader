@@ -588,15 +588,22 @@ module._genDepsDot = function () {
         'rankdir=LR;',
         'concentrate=true;'
     );
+    var nsColorMap = {
+        'lib': '#cce6ff',
+        'o': '#ff9999'
+    };
     for (var n in ms) {
         var m = ms[n],
             mdeps = m.deps;
-        if (! (mdeps && mdeps.length)) {
-            ret.push('"' + m.fullname() + '" [shape=box]');
-            continue;
-        }
-        for (var i = 0, iM = mdeps.length; i < iM; ++i) {
-            ret.push('"' + m.fullname() + '" -> "' + ms[mdeps[i]].fullname() + '";');
+
+        ret.push('"' + m.fullname() + '" [shape=box' + (
+                (m.ns in nsColorMap) ? (' fillcolor="' + nsColorMap[m.ns] + '" style=filled') : ''
+            ) + ']');
+
+        if (mdeps && mdeps.length) {
+            for (var i = 0, iM = mdeps.length; i < iM; ++i) {
+                ret.push('"' + m.fullname() + '" -> "' + ms[mdeps[i]].fullname() + '";');
+            }
         }
     }
     ret.push('}');
