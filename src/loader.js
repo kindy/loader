@@ -191,21 +191,39 @@ _merge(ModuleCfg.prototype, {
     },
     geturl: function (rload) {
         var path = _modns[this.ns].path;
-        var url = path.replace(/\?/, this.name.replace(/\./g, '/'));
+        var pkg = _modns[this.ns].pkg;
+        var mname = this.name;
 
-        if (this.nocache) {
-            url += (url.indexOf('?') === -1 ? '?' : '&') + '_t=' + new Date().getTime();
-            if (rload) {
-                delete this.nocache;
-            }
+        if (pkg) {
+            mname = find_pkg(mname, pkg);
         }
 
+        var url = path.replace(/\?/, mname.replace(/\./g, '/'));
+
         if (rload) {
+            if (this.nocache) {
+                url += (url.indexOf('?') === -1 ? '?' : '&') + '_t=' + new Date().getTime();
+                delete this.nocache;
+            }
             this.lasturl = url;
         }
         _log(url);
 
         return url;
+
+
+        function find_pkg (mname, pkg) {
+            for (var pname in pkg) {
+                var mlist = pkg[pname];
+                for (var i = mlist.length - 1; i >= 0; --i) {
+                    if (mlist[i] == mname) {
+                        return pname;
+                    }
+                }
+            }
+
+            return mname;
+        }
     },
     clear: function (level) {
         if (level >= 1) {
@@ -461,15 +479,31 @@ function _load (mods, cb) {
         if (n === 0) {
             return _check_dyn_embed();
         } else {
-            var mod;
-            for (var i = 0, iM = n; i < iM; ++i) {
+            var mod,
+                urls = {},
+                i = 0,
+                iM = n,
+                url;
+
+            n = 0;
+
+            for (; i < iM; ++i) {
                 mod = _mods[mods[i]];
-                _log('fetch js url ->', mod.geturl());
-                //get(url, callback, charset, timeout)
+                url = mod.geturl();
                 mod.status = LOADING;
+
+                if (url in urls) continue;
+
+                urls[url] = mod;
+                n++;
+            }
+
+            for (url in urls) {
+                //get(url, callback, charset, timeout)
+                mod = urls[url];
+
                 get(mod.geturl(true), function (m) {
                     --n;
-                    m = m;
                     m.status = LOADED;
                     if (n <= 0) {
                         // 把当前待加载的全部加载完
@@ -718,11 +752,38 @@ require.config = function (ns, cfg) {
 
     if (! (ns in _modns)) _modns[ns] = {};
 
-    _merge(_modns[ns], cfg);
+    apply_config(_modns[ns], cfg);
 
     return ns === _dftns ? require : require.at(ns);
 };
 
+/*
+ * path
+ * pkg
+ * */
+function apply_config (curr, cfg) {
+    var oldv,
+        newv;
+    for (var k in cfg) {
+        switch (k) {
+        case 'pkg':
+            oldv = curr[k];
+            newv = cfg[k];
+            if (newv === null) {
+                delete curr[k];
+                break;
+            }
+            if (! oldv) {
+                oldv = curr[k] = {};
+            }
+            _merge(true, oldv, newv);
+            break;
+        default:
+            curr[k] = cfg[k];
+            break;
+        }
+    }
+}
 /*
  * require.at  - 创建1个以 ns 作为默认 ns 的 require
  *
