@@ -504,7 +504,6 @@ function _load (mods, cb) {
 
                 get(mod.geturl(true), function (m) {
                     --n;
-                    m.status = LOADED;
                     if (n <= 0) {
                         // 把当前待加载的全部加载完
                         // 继续看还有没有要加载的
@@ -716,7 +715,7 @@ require = function () {
             iM = cb.length;
         var cbargs = [];
         for (i = 0; i < iM; ++i) {
-            cbargs[i] = ret[i].getm(true);
+            cbargs[i] = ret[i].getm();
         }
         return cb.apply(null, cbargs);
         cbargs = null;
