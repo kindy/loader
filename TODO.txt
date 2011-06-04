@@ -1,9 +1,13 @@
   Mon May  9 23:27:19 CST 2011
-# 模块名支持 alias - 打包时候用到
 # url 映射支持 自定义 geturl - 使用 combo 特性时候用到
+  Sat Jun  4 09:14:00 CST 2011
+# 依赖支持并行载入
 
 
 = DONE
+  Sat Jun  4 09:10:37 CST 2011
+# 模块名支持 alias - 打包时候用到
+  实现了每 ns 的 pkg 配置，可以指定具体的 模块 从某个个包读取
   Sat May 14 22:37:08 CST 2011
 # require 的 cb 如果有 .length ，那么初始化加载的 module 给他
   如果加载的 jquery-v16 里面的的模块定义是 module('jquery', fn)

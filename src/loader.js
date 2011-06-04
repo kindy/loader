@@ -585,10 +585,12 @@ module = function () {
     mod.status = LOADED;
     mod._init = fn;
 
+    var mod_ns = mod.ns;
     if (deps) {
         mod.deps = [];
         for (var i = 0, iM = deps.length; i < iM; ++i) {
-            mod.deps[i] = get_or_init_m(deps[i]).name;
+            // 如果依赖项没有指定 @ 使用当前模块的 @
+            mod.deps[i] = get_or_init_m(deps[i], mod_ns).name;
         }
     }
 
@@ -718,7 +720,6 @@ require = function () {
             cbargs[i] = ret[i].getm();
         }
         return cb.apply(null, cbargs);
-        cbargs = null;
     }
     if (! missing.length) {
         alldone();
