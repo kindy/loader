@@ -28,6 +28,8 @@ if (require || module) return;
  *  deps: ["b", "c"],           - 依赖列表
  *  init: fn,                   - 初始化函数，此函数非传给 module 的函数，被包了
  *  getm: function () {}        - (初始化并)获取模块
+ *  clear: function () {}       - 重置模块
+ *  fullname: function () {}    - 获取模块名 带 ns 的
  *  geturl: function () {}      - 获取加载地址
  *  byother: true|false         - 是否通过独立的 js 加载的
  *                                通常独立加载的才能动态读取embed
