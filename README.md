@@ -211,7 +211,7 @@ loader 内部是根据每个 ns 的 path 设置来计算模块名到加载路径
 当需要从某个 ns 加载大量模块的时候，可以使用此函数，  
 免去给每个模块都添加 `@ns` 的麻烦
 
-require("a@lib", "b@lib", cb) 定价于  
+require("a@lib", "b@lib", cb) 等价于  
 require.at("lib")("a", "b", cb)
 
 
