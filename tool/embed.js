@@ -1,4 +1,4 @@
-#!/bin/env node
+#!/usr/bin/env node
 
 var ugl = require('uglify-js'),
     fs = require('fs'),
