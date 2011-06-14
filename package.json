@@ -1,0 +1,19 @@
+{
+  "author": "kindy lin <kindy61@gmail.com>",
+  "name": "kjs",
+  "description": "tool for js module create and load",
+  "version": "0.2.0",
+  "homepage": "https://github.com/kindy/loader",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/kindy/loader.git"
+  },
+  "dependencies": {
+    "uglify-js"  : ">=1.0.1"
+  },
+  "bin": {
+    "kjs-embed": "./bin/kjs-embed",
+    "kjs-make": "./bin/kjs-make"
+  },
+  "devDependencies": {}
+}
