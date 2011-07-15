@@ -223,3 +223,9 @@ loader 内部是根据每个 ns 的 path 设置来计算模块名到加载路径
 不复杂的 dot 可以在线解析( http://ashitani.jp/gv/ )  
 或者自己安装 http://www.graphviz.org/ 使用
 
+
+# TODO
+
+* 版本 + 时间戳问题 - 细化到 @ns , module ?
+* 插件式模块，一般不提供直接的接口，都是挂接接口到其他接口上，这类接口一旦引入，应该自动初始化
+    autoinit 选项现在的行为有些问题
