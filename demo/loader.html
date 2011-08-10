@@ -25,6 +25,12 @@
                     console.timeEnd('b');
                     console.time('jquery');
                     var $ = require('jquery').jquery;
+
+                    var css = require('ld.css').css('div {color: red;}');
+                    setTimeout(function () {
+                        css.clear();
+                    }, 2000);
+
                     console.timeEnd('jquery');
                     $('<div style="float: left;" />').html('<p>jquery load done</p>').appendTo(document.body)
                         .append('<p>b load done</p>')

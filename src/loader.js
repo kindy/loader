@@ -1031,4 +1031,116 @@ module('seajs.asset.get', function(util) {
 
 });
 
+module('ld.css', function(mod) {
+/*
+ * CSS
+ *  ext -> true: url, false: text
+ *  text
+ *  url
+ *  node
+ *  update()
+ *  clear()
+ *
+ *  create()
+ */
+function CSS (ext, c) {
+    this.ext = ext;
+    this[ext ? 'url' : 'text'] = c;
+}
+var _p = CSS.prototype;
+_p.update = function (c) {
+    if (this.ext) {
+        this.node.setAttribute("href", c);
+    } else {
+        if (this.node.styleSheet) {// IE
+            this.node.styleSheet.cssText = c;
+        } else {// w3c
+            if (this.node.firstChild) {
+                this.node.removeChild(this.node.firstChild);
+            }
+            this.node.appendChild(document.createTextNode(c));
+        }
+    }
+
+    return this;
+};
+_p.create = function () {
+    if (this.node) return this;
+
+    this.create = null;
+    var doc = document;
+    var node;
+    if (this.ext) {
+        node = createLink(this.url);
+    } else {
+        node = createStyle(this.text);
+    }
+    this.node = node;
+
+    var heads = doc.getElementsByTagName("head");
+
+    if (heads.length) {
+        heads[0].appendChild(node);
+    } else {
+        doc.documentElement.appendChild(node);
+    }
+
+    return this;
+
+    function createStyle(css) {
+        var node = doc.createElement("style");
+
+        node.setAttribute("type", "text/css");
+        if (node.styleSheet) {// IE
+            node.styleSheet.cssText = css;
+        } else {// w3c
+            node.appendChild(doc.createTextNode(css));
+        }
+
+        return node;
+    }
+
+    function createLink(url) {
+        var node = doc.createElement("link");
+        node.setAttribute("rel", "stylesheet");
+        node.setAttribute("type", "text/css");
+        node.setAttribute("href", url);
+
+        return node;
+    }
+};
+_p.clear = function () {
+    this.node && this.node.parentNode && this.node.parentNode.removeChild(this.node);
+
+    delete this.text;
+    delete this.url;
+    delete this.node;
+};
+
+mod.CSS = CSS;
+mod.css = function (css) {
+    var c = new CSS(false, css);
+    c.create();
+
+    return c;
+};
+mod.url = function (css) {
+    var c = new CSS(true, css);
+    c.create();
+
+    return c;
+};
+/*
+ * lz.css
+ *
+ * CSS ->
+ * css(css:string)  -> 添加样式内容，返回创建的 CSS 对象
+ *  后续可以用来删除和更新样式内容
+ * url(url:string) -> 添加样式文件，返回创建的 CSS 对象
+ *
+ * less  -> 与 require.css 类似，支持 lesscss 而已
+ * lessurl   -> 与 require.css 类似，支持 lesscss 而已
+ */
+});
+
 })();
